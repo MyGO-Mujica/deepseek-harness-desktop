@@ -128,6 +128,8 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
     throwIfAborted(options.signal)
     await validateArtifact(paths.temporary, platform)
     throwIfAborted(options.signal)
+    // Only replace a previously completed installer after full validation, so any
+    // failed or cancelled redownload keeps the working artifact in place.
     await rename(paths.temporary, paths.completed)
     return paths.completed
   } catch (cause) {
@@ -188,11 +190,8 @@ async function prepareDownloadPaths(
   const filename = `DSH-Desktop-${version}-${platformName}.${extension}`
   const completed = join(directory, filename)
   const completedStat = await lstatOptional(completed)
-  if (completedStat !== undefined) {
-    if (!completedStat.isFile() || completedStat.isSymbolicLink()) {
-      throw new UpdateDownloadError('invalid-options', 'The completed update path is not a regular file.')
-    }
-    await unlink(completed)
+  if (completedStat !== undefined && (!completedStat.isFile() || completedStat.isSymbolicLink())) {
+    throw new UpdateDownloadError('invalid-options', 'The completed update path is not a regular file.')
   }
 
   return {

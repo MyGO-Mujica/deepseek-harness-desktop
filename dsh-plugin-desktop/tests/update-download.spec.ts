@@ -271,4 +271,73 @@ describe('desktop update installer download', () => {
     }), 'invalid-options')
     expect(requested).toBe(false)
   })
+
+  it('preserves a completed installer when a same-version redownload fails', async () => {
+    const userDataPath = await temporaryUserData()
+    const artifact = dmgArtifact()
+    const completed = await downloadDesktopUpdate({
+      platform: 'darwin',
+      version: '2.10.0',
+      userDataPath,
+      request: async (url) => {
+        expect(url).toBe(DESKTOP_DOWNLOAD_URLS.darwin)
+        return chunkedResponse([artifact])
+      },
+    })
+
+    await expectFailure(downloadDesktopUpdate({
+      platform: 'darwin',
+      version: '2.10.0',
+      userDataPath,
+      request: async () => { throw new Error('offline') },
+    }), 'network')
+
+    expect(await readFile(completed)).toEqual(Buffer.from(artifact))
+    await expectNoPartialFiles(userDataPath, '2.10.0')
+  })
+
+  it('preserves a completed installer when a same-version redownload is rejected as invalid', async () => {
+    const userDataPath = await temporaryUserData()
+    const artifact = dmgArtifact()
+    const completed = await downloadDesktopUpdate({
+      platform: 'darwin',
+      version: '2.11.0',
+      userDataPath,
+      request: async () => chunkedResponse([artifact]),
+    })
+
+    await expectFailure(downloadDesktopUpdate({
+      platform: 'darwin',
+      version: '2.11.0',
+      userDataPath,
+      request: async () => chunkedResponse([new Uint8Array(1024)]),
+    }), 'invalid-artifact')
+
+    expect(await readFile(completed)).toEqual(Buffer.from(artifact))
+    await expectNoPartialFiles(userDataPath, '2.11.0')
+  })
+
+  it('replaces a completed installer only after the redownload validates', async () => {
+    const userDataPath = await temporaryUserData()
+    const firstArtifact = dmgArtifact()
+    const secondArtifact = Buffer.from(dmgArtifact())
+    secondArtifact.fill(0x6b, 0, secondArtifact.byteLength - 512)
+    const completed = await downloadDesktopUpdate({
+      platform: 'darwin',
+      version: '2.12.0',
+      userDataPath,
+      request: async () => chunkedResponse([firstArtifact]),
+    })
+
+    const result = await downloadDesktopUpdate({
+      platform: 'darwin',
+      version: '2.12.0',
+      userDataPath,
+      request: async () => chunkedResponse([secondArtifact]),
+    })
+
+    expect(result).toBe(completed)
+    expect(await readFile(completed)).toEqual(Buffer.from(secondArtifact))
+    await expectNoPartialFiles(userDataPath, '2.12.0')
+  })
 })
