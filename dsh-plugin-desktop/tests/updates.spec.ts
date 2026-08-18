@@ -249,6 +249,27 @@ describe('desktop update Host plugin', () => {
     expect(harness.tray.label()).toBe('DSH Desktop 2.2.0 Available')
   })
 
+  it('surfaces a failed post-confirmation recheck and does not start the download', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(versionResponse('2.1.0'))
+      .mockRejectedValueOnce(new TypeError('offline'))
+    const harness = await createHarness({
+      packaged: false,
+      request,
+      confirmDownload: async () => true,
+    })
+
+    await harness.tray.invoke()
+
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(harness.confirmDownload).toHaveBeenCalledWith('2.1.0')
+    expect(harness.showManualCheckResult).toHaveBeenCalledWith(null)
+    expect(harness.downloadAndOpen).not.toHaveBeenCalled()
+    expect(harness.notifications).toEqual([])
+    expect(harness.warnings).toEqual([])
+    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+  })
+
   it.each([
     ['up-to-date', async () => versionResponse('2.0.0')],
     ['failed', async () => new Response('unavailable', { status: 503 })],

@@ -148,7 +148,15 @@ export function apply(ctx: Context, config: Config): void {
         }
         if (!confirmed || disposed) return
 
-        const confirmedVersion = observeResult(await startCheck())
+        const confirmedResult = await startCheck()
+        if (disposed) return
+        if (confirmedResult === null) {
+          // The user just confirmed a download, so a failed recheck must surface a
+          // retry prompt instead of silently abandoning the accepted download.
+          await adapter.showManualCheckResult(null)
+          return
+        }
+        const confirmedVersion = observeResult(confirmedResult)
         if (confirmedVersion !== version || disposed) return
 
         const controller = new AbortController()
